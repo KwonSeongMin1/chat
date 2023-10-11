@@ -8,8 +8,8 @@
 #include <arpa/inet.h>
 #include <time.h>
 #include <unistd.h>
-#include <sqlite3.h>
 #include "Network_Common.h"
+#include "db.h"
 
 int main(int argc,char *argv[]){
     struct sockaddr_in stCAddr;
@@ -19,8 +19,6 @@ int main(int argc,char *argv[]){
     int nRetval;
 	struct tm *current_time;
 	time_t t;
-	sqlite3 *db;
-	int rc;	// db
 	char nickname[11];
 
 	// Initialize file descripter
@@ -53,65 +51,14 @@ int main(int argc,char *argv[]){
 
 
 	// =============== start to connect db ==================
-
-
-	rc = sqlite3_open("user.db",&db);
-	if(rc){
-		fprintf(stderr,"Can't open db : %s\n",sqlite3_errmsg(db));
-		return(0);
-	}
-	
-	// create 'user' table
-	const char *create_user_sql = "create table if not exists user (id integer primary key, nickname text unique);";
-	rc = sqlite3_exec(db, create_user_sql, 0, 0, 0);
-	if(rc!=SQLITE_OK){
-		fprintf(stderr, "SQL error : %s\n",sqlite3_errmsg(db));
-	}
-	
-	// create 'message' table
-	const char *create_message_sql = "create table if not exists message("
-		"message_id integer primary key,"
-		"message_text text,"
-		"send_time timestamp,"
-		"nickname text,"
-		"foreign key (nickname) references user(nickname));";
-	rc = sqlite3_exec(db,create_message_sql,0,0,0);
-	if(rc!=SQLITE_OK){
-		fprintf(stderr, "SQL error : %s\n",sqlite3_errmsg(db));
-	}
-
+	start_db();
 	// create nickname
 	while(1){
 		printf("Enter a string (up to 10 characters)>>>");
 		fgets(nickname,sizeof(nickname),stdin);
-
-		const char *insert_nickname = "insert into user (nickname) values (?);";
-		sqlite3_stmt *stmt;
-		rc = sqlite3_prepare_v2(db, insert_nickname, -1 ,&stmt, 0);
-		if(rc!=SQLITE_OK){
-			fprintf(stderr, "SQL error : %s\n",sqlite3_errmsg(db));
-		}
-		sqlite3_bind_text(stmt,1,nickname,-1,SQLITE_STATIC);
-		rc=sqlite3_step(stmt);
-
-		if(nickname[strlen(nickname)-1]!='\n'){
-			printf("Nickname can be created with a maximun of 10 characters.\n");
-			while(getchar()!='\n');
-			continue;
-		}
-		if(rc==SQLITE_CONSTRAINT){
-			printf("Nickname already exists. Please choose a different nickname.\n");
-			continue;
-		}
-		else if(rc!=SQLITE_DONE){	
-			fprintf(stderr, "SQL error : %s\n",sqlite3_errmsg(db));
-		}
-		else{
-			nickname[strlen(nickname)-1]='\0';
-			printf("Hello. \" %s \"\n",nickname);
-			break;
-		}
-		sqlite3_finalize(stmt);
+		int flag = create_nickname(nickname);
+		if(flag) continue;
+		else break;
 	}
 
 	// =============== start chat ===================
@@ -151,18 +98,18 @@ int main(int argc,char *argv[]){
                     	send(rfds[1].fd,combined_message,sizeof(combined_message),0);
 					}
 					// insert message log
-					const char *insert_message = "insert into message (message_text,send_time,nickname) values (?,?,?);";
-					sqlite3_stmt *stmt;
-					rc = sqlite3_prepare_v2(db,insert_message,-1,&stmt,0);
-					if(rc!=SQLITE_OK){
-						printf("insert SQL error : %s\n",sqlite3_errmsg(db));
-					}
-					sqlite3_bind_text(stmt,1,message,-1,SQLITE_STATIC);
-					sqlite3_bind_text(stmt,2,timestamp,-1,SQLITE_STATIC);
-					sqlite3_bind_text(stmt,3,nickname,-1,SQLITE_STATIC);
-					rc = sqlite3_step(stmt);
-					sqlite3_finalize(stmt);
-
+//					const char *insert_message = "insert into message (message_text,send_time,nickname) values (?,?,?);";
+//					sqlite3_stmt *stmt;
+//					rc = sqlite3_prepare_v2(db,insert_message,-1,&stmt,0);
+//					if(rc!=SQLITE_OK){
+//						printf("insert SQL error : %s\n",sqlite3_errmsg(db));
+//					}
+//					sqlite3_bind_text(stmt,1,message,-1,SQLITE_STATIC);
+//					sqlite3_bind_text(stmt,2,timestamp,-1,SQLITE_STATIC);
+//					sqlite3_bind_text(stmt,3,nickname,-1,SQLITE_STATIC);
+//					rc = sqlite3_step(stmt);
+//					sqlite3_finalize(stmt);
+//
 
 					//snprintf(combined_message, sizeof(combined_message), "[%s]>>>%s", nickname, message);
                     //send(rfds[1].fd,combined_message,sizeof(combined_message),0);
@@ -181,6 +128,6 @@ int main(int argc,char *argv[]){
     	}
     }while(1);
     close(rfds[1].fd);
-	sqlite3_close(db);
+//	sqlite3_close(db);
     return 0;
 }
