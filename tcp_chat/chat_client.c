@@ -58,7 +58,10 @@ int main(int argc,char *argv[]){
 		fgets(nickname,sizeof(nickname),stdin);
 		int flag = create_nickname(nickname);
 		if(flag) continue;
-		else break;
+		else{
+			send(rfds[1].fd,nickname,sizeof(nickname),0);
+			break;
+		}
 	}
 
 	// =============== start chat ===================

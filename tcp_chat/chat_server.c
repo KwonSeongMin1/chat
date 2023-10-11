@@ -20,6 +20,7 @@ int main(int argc, char *argv[]){
     int nTimeout=0;
     int nRetval;
     int nKeepRunning=1;
+	int current_client = 0;
 
 	// Initialize FD
     for(int i=0;i<MAX_CLIENTS+2;i++){
@@ -73,7 +74,7 @@ int main(int argc, char *argv[]){
     rfds[0].events=POLLIN;
     rfds[0].revents=0;
 
-	// create TCP server socket & fd[1]
+	// create TCP server socket >>> fd[1]
     rfds[1].fd=start_tcp_server(atoi(argv[1]),atoi(argv[2]));
     if(rfds[1].fd<0){
         printf("Starting Server is failed.\n");
@@ -103,6 +104,13 @@ int main(int argc, char *argv[]){
                                 nKeepRunning=0;
                                 break;
                             }
+							if(strncasecmp(strBuffer,"/list",5)==0){
+								printf("current clients : %d\n", current_client);
+								for(int j=2;j<=current_client+1;j++){
+									printf("fd : %d\n",rfds[j].fd);
+								}
+								break;
+							}
                             nBufferLen2=sprintf(strBuffer2,"\n\n[NOTICE] %s\n\n",strBuffer);
                             for(int i=2;i<MAX_CLIENTS+2;i++){
                                 if(rfds[i].fd<0) continue;
@@ -119,6 +127,14 @@ int main(int argc, char *argv[]){
                                     rfds[i].fd=fd;
                                     rfds[i].events=POLLIN;
                                     rfds[i].revents=0;
+									
+									char nickname[15];
+									int nickname_len;
+									bzero(nickname,15);
+									nickname_len = read(rfds[i].fd, nickname, 15);
+
+									printf("nikcname %s, client fd : %d is connecting.\n",nickname,fd);
+									current_client += 1;
                                     break;
                                 }
                             }
@@ -141,6 +157,7 @@ int main(int argc, char *argv[]){
                             rfds[i].fd=-1;
                             rfds[i].events=0;
                             rfds[i].revents=0;
+							current_client -= 1;
                         }
                         else{
 							// broadcasting
