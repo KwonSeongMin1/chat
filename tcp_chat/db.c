@@ -7,7 +7,6 @@ sqlite3 *db;
 int rc;
 
 void start_db(){
-
 	rc = sqlite3_open("user.db",&db);
 	if(rc){
 		fprintf(stderr,"Can't open db : %s\n",sqlite3_errmsg(db));
@@ -37,7 +36,6 @@ void start_db(){
 
 int create_nickname(char *nickname){
 	rc = sqlite3_open("user.db",&db);
-
 	const char *insert_nickname = "insert into user (nickname) values (?);";
 		sqlite3_stmt *stmt;
 		rc = sqlite3_prepare_v2(db, insert_nickname, -1 ,&stmt, 0);
@@ -67,5 +65,21 @@ int create_nickname(char *nickname){
 
 		return 0;
 		sqlite3_close(db);
+}
+
+void insert_message_log(char *message, char *timestamp, char *nickname){
+	rc = sqlite3_open("user.db",&db);
+	const char *insert_message = "insert into message(message_text, send_time, nickname) values (?,?,?);";
+	sqlite3_stmt *stmt;
+	rc = sqlite3_prepare_v2(db,insert_message,-1,&stmt,0);
+	if(rc!=SQLITE_OK){
+		printf("insert SQL error : %s\n",sqlite3_errmsg(db));
+	}
+	sqlite3_bind_text(stmt,1,message,-1,SQLITE_STATIC);
+	sqlite3_bind_text(stmt,2,timestamp,-1,SQLITE_STATIC);
+	sqlite3_bind_text(stmt,3,nickname,-1,SQLITE_STATIC);
+	rc=sqlite3_step(stmt);
+	sqlite3_finalize(stmt);
+	sqlite3_close(db);
 }
 

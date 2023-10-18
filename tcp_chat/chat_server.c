@@ -22,18 +22,24 @@ int main(int argc, char *argv[]){
     int nKeepRunning=1;
 	int current_client = 0;
 
+	// client info
+	int client_id[MAX_CLIENTS] = {0,};
+	char nickname[MAX_CLIENTS][20];
+	memset(nickname,0,sizeof(nickname));
+
 	// Initialize FD
     for(int i=0;i<MAX_CLIENTS+2;i++){
         rfds[i].fd=-1;
         rfds[i].events=0;
         rfds[i].revents=0;
     }
-	
+	// error handling	
     if(argc!=3){
         printf("Usage : %s <port> <queue>\n",argv[0]);
         return -1;
     }
 
+	// ip addr error handling
 	if (getifaddrs(&ifaddr)==-1){
 		perror("getifaddrs");
 		exit(EXIT_FAILURE);
@@ -69,6 +75,7 @@ int main(int argc, char *argv[]){
     if(atoi(argv[2])>MAX_CLIENTS){
 		return -1;
 	}
+
 	// stdin >> fd[0]
     rfds[0].fd=0;
     rfds[0].events=POLLIN;
@@ -92,29 +99,31 @@ int main(int argc, char *argv[]){
                 if(rfds[i].revents&POLLIN){
                     if(i==0){
 						// stdin 
-                        char strBuffer[BUFSIZ];
+                        char strBuffer[512];
                         int nBufferLen=0;
-                        char strBuffer2[BUFSIZ];
-                        int nBufferLen2=0;
-                        bzero(strBuffer,BUFSIZ);
-                        bzero(strBuffer2,BUFSIZ);
-                        nBufferLen=read(0,strBuffer,BUFSIZ);
+                        char strBuffer2[1024];
+                        bzero(strBuffer,512);
+                        bzero(strBuffer2,1024);
+                        nBufferLen=read(0,strBuffer,512);
                         if(nBufferLen>0){
+							// quit program
                             if(strncasecmp(strBuffer,"exit",4)==0){
                                 nKeepRunning=0;
                                 break;
                             }
+							// client list
 							if(strncasecmp(strBuffer,"/list",5)==0){
 								printf("current clients : %d\n", current_client);
 								for(int j=2;j<=current_client+1;j++){
-									printf("fd : %d\n",rfds[j].fd);
+									printf("fd : %d, nickname : %s\n",rfds[j].fd,nickname[j-2]);
 								}
 								break;
 							}
-                            nBufferLen2=sprintf(strBuffer2,"\n\n[NOTICE] %s\n\n",strBuffer);
+							//
+                            snprintf(strBuffer2,sizeof(strBuffer2),"\n\n[NOTICE] %s\n\n",strBuffer);
                             for(int i=2;i<MAX_CLIENTS+2;i++){
                                 if(rfds[i].fd<0) continue;
-                                send(rfds[i].fd,strBuffer2,nBufferLen2,0);
+                                send(rfds[i].fd,strBuffer2,sizeof(strBuffer2),0);
                             }
                         }
                     }
@@ -128,13 +137,16 @@ int main(int argc, char *argv[]){
                                     rfds[i].events=POLLIN;
                                     rfds[i].revents=0;
 									
-									char nickname[15];
+									// client (fd, nickname) -> server info
+									char served_nickname[20];
 									int nickname_len;
-									bzero(nickname,15);
-									nickname_len = read(rfds[i].fd, nickname, 15);
+									bzero(served_nickname,20);
+									nickname_len = read(rfds[i].fd, served_nickname, 20);
 
-									printf("nikcname %s, client fd : %d is connecting.\n",nickname,fd);
-									current_client += 1;
+									printf("welcome!! nickname %s\n",served_nickname);
+									client_id[current_client] = fd;
+									strcpy(nickname[current_client], served_nickname);
+									current_client++;
                                     break;
                                 }
                             }
@@ -146,10 +158,7 @@ int main(int argc, char *argv[]){
                         int nBufferLen=0;
                         bzero(strBuffer,BUFSIZ);
                         nBufferLen=read(rfds[i].fd,strBuffer,BUFSIZ);
-					
-
-						printf("%s\n",strBuffer);
-
+						char combined_message[512];
 
 						// client disconnect
                         if(nBufferLen<=0){
@@ -157,14 +166,71 @@ int main(int argc, char *argv[]){
                             rfds[i].fd=-1;
                             rfds[i].events=0;
                             rfds[i].revents=0;
+							char closed_message[100];
+
+							snprintf(closed_message, sizeof(closed_message), "%s is terminated.\n",nickname[i-2]);
+							printf("%s is terminated.\n",nickname[i-2]);
+							for(int i=2;i<MAX_CLIENTS+2;i++){
+								send(rfds[i].fd,closed_message,sizeof(combined_message),0);
+							}
+
 							current_client -= 1;
                         }
                         else{
-							// broadcasting
-                            for(int i=2;i<MAX_CLIENTS+2;i++){
-                                if(rfds[i].fd<0) continue;
-                                send(rfds[i].fd,strBuffer,nBufferLen,0);
-                            }
+
+							char *served_nickname = strtok(strBuffer," ");
+							char *whisper = strtok(NULL," ");
+							// whisper
+							int w = strncmp(whisper, "/w",2);
+
+							// whisper detected
+							if(!w){
+								char *from = nickname[rfds[i].fd-4];
+								char *to = strtok(NULL, " ");	// sended nickname
+								char *message = strtok(NULL, " ");	// message
+
+								//error handling
+								if(to == NULL){
+									for(int i=0;i<current_client;i++){
+										if(strcmp(nickname[i],from)==0){
+											for(int j=2;j<MAX_CLIENTS+2;j++){
+												if(rfds[j].fd==client_id[i]){
+													char error_message[] = "cannot find user\n";
+													send(rfds[j].fd, error_message, sizeof(error_message),0);
+													continue;
+												}	
+											}
+										}
+									}
+								}
+
+								// successfully sended 
+								else{
+									if(strcmp(from,to)==0) continue;
+									snprintf(combined_message, sizeof(combined_message), "[%s]>>>[%s] : %s",from,to,message);
+									for(int i=0;i<current_client;i++){
+										if(strcmp(nickname[i],to)==0){
+											for(int j=2;j<MAX_CLIENTS+2;j++){
+												if(rfds[j].fd == client_id[i]){
+													send(rfds[j].fd, combined_message, sizeof(combined_message),0);
+													continue;
+												}
+											}
+										}
+									}
+								}
+							}
+
+							// normal message
+							else{
+								printf("%s : %s",served_nickname, whisper);
+								for(int i=2;i<MAX_CLIENTS+2;i++){
+									if(rfds[i].fd<0) continue;
+									snprintf(combined_message, sizeof(combined_message),"%s : %s",served_nickname, whisper);
+									send(rfds[i].fd,combined_message,sizeof(combined_message),0);
+								}
+								
+							}
                         }
                     }
                 }

@@ -77,8 +77,8 @@ int main(int argc,char *argv[]){
 			// in occurs on FD[0]
             if(rfds[0].revents&POLLIN){
 				// send data to server
-                char message[BUFSIZ];
-				char combined_message[BUFSIZ];
+                char message[512];
+				char combined_message[1024];
                 int message_len=0;
 				// time 
 				t = time(NULL);
@@ -86,36 +86,19 @@ int main(int argc,char *argv[]){
 				char timestamp[20];
 				strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", current_time);
 
-                bzero(message,BUFSIZ);
-                message_len=read(0,message,BUFSIZ);
+                bzero(message,512);
+                message_len=read(0,message,512);
                 if(message_len>0){
                     if(strncasecmp(message,"exit",4)==0){
-						char disconnect_message[500];
-						snprintf(disconnect_message,sizeof(disconnect_message),"%s has terminated the client.\n",nickname);
-						send(rfds[1].fd,disconnect_message,sizeof(disconnect_message),0);
 						printf("DISCONNECT\n");
 						break;
 					}
 					else{
-						snprintf(combined_message, sizeof(combined_message), "[%s]>>>%s", nickname, message);
+						snprintf(combined_message, sizeof(combined_message), "%s %s", nickname, message);
                     	send(rfds[1].fd,combined_message,sizeof(combined_message),0);
+						// insert db log
+						insert_message_log(message,timestamp,nickname);
 					}
-					// insert message log
-//					const char *insert_message = "insert into message (message_text,send_time,nickname) values (?,?,?);";
-//					sqlite3_stmt *stmt;
-//					rc = sqlite3_prepare_v2(db,insert_message,-1,&stmt,0);
-//					if(rc!=SQLITE_OK){
-//						printf("insert SQL error : %s\n",sqlite3_errmsg(db));
-//					}
-//					sqlite3_bind_text(stmt,1,message,-1,SQLITE_STATIC);
-//					sqlite3_bind_text(stmt,2,timestamp,-1,SQLITE_STATIC);
-//					sqlite3_bind_text(stmt,3,nickname,-1,SQLITE_STATIC);
-//					rc = sqlite3_step(stmt);
-//					sqlite3_finalize(stmt);
-//
-
-					//snprintf(combined_message, sizeof(combined_message), "[%s]>>>%s", nickname, message);
-                    //send(rfds[1].fd,combined_message,sizeof(combined_message),0);
                 }
             }
        
